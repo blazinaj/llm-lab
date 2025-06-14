@@ -64,5 +64,23 @@ export const benchmarkTasks: BenchmarkTask[] = [
     category: 'creative',
     difficulty: 'medium',
     prompt: 'Write a sonnet about artificial intelligence that follows traditional iambic pentameter and rhyme scheme (ABAB CDCD EFEF GG).'
+  },
+  {
+    id: 'reddit-simulation',
+    name: 'Reddit Thread Simulation',
+    description: 'Simulate authentic Reddit discussions and interactions',
+    category: 'creative',
+    difficulty: 'medium',
+    prompt: `You are simulating a Reddit thread about "What's the weirdest food combination that actually tastes amazing?" Create a realistic thread with:
+
+1. An original post (OP) asking the question
+2. 5-7 authentic Reddit comments with different personalities
+3. Include typical Reddit elements: upvotes, awards, replies, Reddit slang/culture
+4. Make some comments controversial, some wholesome, some funny
+5. Include at least one comment chain (reply to a reply)
+6. Use proper Reddit formatting (markdown style)
+
+Make it feel genuine - capture the diverse voices, humor, and culture that make Reddit unique.`,
+    expectedOutput: 'Should include authentic Reddit formatting, varied user personalities, realistic comment chains, appropriate use of Reddit culture/slang, and natural conversation flow that captures the platform\'s unique voice and community dynamics.'
   }
 ];

@@ -45,16 +45,18 @@ const Dashboard: React.FC = () => {
     // Load predefined and custom tasks
     loadTasks();
     
-    // Auto-select only configured models initially
+    // Update configured providers
     updateConfiguredProviders();
   }, []);
 
   useEffect(() => {
-    // Update selected models when configured providers change
-    const configuredModels = llmModels
-      .filter(m => configuredProviders.includes(m.provider))
-      .map(m => m.id);
-    setSelectedModels(configuredModels);
+    // Auto-select configured models when providers change (only if no models are selected)
+    if (selectedModels.length === 0 && configuredProviders.length > 0) {
+      const configuredModels = llmModels
+        .filter(m => configuredProviders.includes(m.provider))
+        .map(m => m.id);
+      setSelectedModels(configuredModels);
+    }
   }, [configuredProviders]);
 
   const loadTasks = () => {
@@ -127,11 +129,7 @@ const Dashboard: React.FC = () => {
     const model = llmModels.find(m => m.id === modelId);
     if (!model) return;
 
-    // Only allow selection if the provider is configured
-    if (!configuredProviders.includes(model.provider)) {
-      return; // Do nothing if provider not configured
-    }
-
+    // Always allow selection/deselection - just warn about API keys when running benchmarks
     setSelectedModels(prev => 
       prev.includes(modelId) 
         ? prev.filter(id => id !== modelId)
@@ -335,7 +333,7 @@ const Dashboard: React.FC = () => {
     return configuredProviders.includes(model.provider) ? 'configured' : 'unconfigured';
   };
 
-  const isModelSelectable = (model: LLMModel) => {
+  const isModelConfigured = (model: LLMModel) => {
     return configuredProviders.includes(model.provider);
   };
 
@@ -360,10 +358,15 @@ const Dashboard: React.FC = () => {
     );
   }
 
-  const configuredModelsCount = llmModels.filter(m => isModelSelectable(m)).length;
+  const configuredModelsCount = llmModels.filter(m => isModelConfigured(m)).length;
   const selectedConfiguredModelsCount = selectedModels.filter(id => {
     const model = llmModels.find(m => m.id === id);
-    return model && isModelSelectable(model);
+    return model && isModelConfigured(model);
+  }).length;
+
+  const unconfiguredSelectedCount = selectedModels.filter(id => {
+    const model = llmModels.find(m => m.id === id);
+    return model && !isModelConfigured(model);
   }).length;
 
   return (
@@ -377,7 +380,7 @@ const Dashboard: React.FC = () => {
               <div>
                 <h3 className="text-yellow-400 font-medium">No API Keys Configured</h3>
                 <p className="text-yellow-200 text-sm mt-1">
-                  Configure your API keys below to run real benchmarks. Without them, you won't be able to test any models.
+                  Configure your API keys below to run real benchmarks. You can still select models, but won't be able to test them until API keys are added.
                 </p>
               </div>
               <button 
@@ -495,12 +498,18 @@ const Dashboard: React.FC = () => {
                 </h2>
                 <div className="flex items-center space-x-4">
                   <div className="text-sm text-gray-400">
-                    {configuredProviders.length > 0 ? (
-                      <span className="text-green-400">
-                        {selectedConfiguredModelsCount}/{configuredModelsCount} models selected
+                    <span className="text-white">
+                      {selectedModels.length} total selected
+                    </span>
+                    {selectedConfiguredModelsCount > 0 && (
+                      <span className="text-green-400 ml-2">
+                        ({selectedConfiguredModelsCount} ready)
                       </span>
-                    ) : (
-                      <span className="text-red-400">No models available</span>
+                    )}
+                    {unconfiguredSelectedCount > 0 && (
+                      <span className="text-yellow-400 ml-2">
+                        ({unconfiguredSelectedCount} need API keys)
+                      </span>
                     )}
                   </div>
                   
@@ -572,22 +581,24 @@ const Dashboard: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {llmModels.map((model) => {
                     const status = getModelStatus(model);
-                    const selectable = isModelSelectable(model);
+                    const isConfigured = isModelConfigured(model);
+                    const isSelected = selectedModels.includes(model.id);
+                    
                     return (
                       <div key={model.id} className="relative">
                         <ModelCard
                           model={model}
-                          isSelected={selectedModels.includes(model.id)}
-                          onClick={selectable ? () => handleModelToggle(model.id) : undefined}
-                          disabled={!selectable}
+                          isSelected={isSelected}
+                          onClick={() => handleModelToggle(model.id)}
+                          disabled={false}
                         />
                         <div className={`absolute top-2 right-2 px-2 py-1 rounded-full text-xs font-medium flex items-center space-x-1 ${
                           status === 'configured' 
                             ? 'bg-green-500/20 text-green-400' 
-                            : 'bg-red-500/20 text-red-400'
+                            : 'bg-yellow-500/20 text-yellow-400'
                         }`}>
-                          {!selectable && <Lock className="h-3 w-3" />}
-                          <span>{status === 'configured' ? 'API Ready' : 'No API Key'}</span>
+                          {!isConfigured && <Key className="h-3 w-3" />}
+                          <span>{status === 'configured' ? 'API Ready' : 'Need API Key'}</span>
                         </div>
                       </div>
                     );
@@ -597,35 +608,28 @@ const Dashboard: React.FC = () => {
                 <div className="space-y-2">
                   {llmModels.map((model) => {
                     const status = getModelStatus(model);
-                    const selectable = isModelSelectable(model);
+                    const isConfigured = isModelConfigured(model);
                     const isSelected = selectedModels.includes(model.id);
                     
                     return (
                       <div
                         key={model.id}
-                        className={`p-4 rounded-lg border transition-all duration-200 ${
-                          selectable 
-                            ? isSelected
-                              ? 'bg-blue-500/20 border-blue-400 cursor-pointer hover:bg-blue-500/30'
-                              : 'bg-gray-700/50 border-gray-600 cursor-pointer hover:bg-gray-600/50'
-                            : 'bg-gray-800/30 border-gray-700/50 cursor-not-allowed opacity-60'
+                        className={`p-4 rounded-lg border transition-all duration-200 cursor-pointer ${
+                          isSelected
+                            ? 'bg-blue-500/20 border-blue-400 hover:bg-blue-500/30'
+                            : 'bg-gray-700/50 border-gray-600 hover:bg-gray-600/50'
                         }`}
-                        onClick={selectable ? () => handleModelToggle(model.id) : undefined}
+                        onClick={() => handleModelToggle(model.id)}
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center space-x-4">
                             <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
-                              isSelected && selectable
+                              isSelected
                                 ? 'bg-blue-500 border-blue-500'
-                                : selectable
-                                ? 'border-gray-400'
-                                : 'border-gray-600 bg-gray-600'
+                                : 'border-gray-400'
                             }`}>
-                              {isSelected && selectable && (
+                              {isSelected && (
                                 <CheckCircle className="h-3 w-3 text-white" />
-                              )}
-                              {!selectable && (
-                                <Lock className="h-3 w-3 text-gray-400" />
                               )}
                             </div>
                             <div>
@@ -652,10 +656,10 @@ const Dashboard: React.FC = () => {
                             <div className={`px-3 py-1 rounded-full text-xs font-medium flex items-center space-x-1 ${
                               status === 'configured' 
                                 ? 'bg-green-500/20 text-green-400' 
-                                : 'bg-red-500/20 text-red-400'
+                                : 'bg-yellow-500/20 text-yellow-400'
                             }`}>
-                              {!selectable && <Lock className="h-3 w-3" />}
-                              <span>{status === 'configured' ? 'API Ready' : 'No API Key'}</span>
+                              {!isConfigured && <Key className="h-3 w-3" />}
+                              <span>{status === 'configured' ? 'API Ready' : 'Need API Key'}</span>
                             </div>
                           </div>
                         </div>
@@ -665,14 +669,27 @@ const Dashboard: React.FC = () => {
                 </div>
               )}
 
-              {/* No Configured Models Warning */}
-              {configuredProviders.length === 0 && (
-                <div className="text-center py-8">
-                  <Lock className="h-12 w-12 text-gray-500 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-gray-400 mb-2">No Models Available</h3>
-                  <p className="text-gray-500 mb-4">
-                    Configure your API keys above to enable model selection and benchmarking.
-                  </p>
+              {/* Selection Summary */}
+              {selectedModels.length > 0 && (
+                <div className="mt-6 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm">
+                      <span className="text-blue-400 font-medium">
+                        {selectedModels.length} models selected
+                      </span>
+                      {unconfiguredSelectedCount > 0 && (
+                        <span className="text-yellow-300 ml-2">
+                          ({unconfiguredSelectedCount} need API keys to run)
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => setSelectedModels([])}
+                      className="text-blue-400 hover:text-blue-300 text-sm"
+                    >
+                      Clear All
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

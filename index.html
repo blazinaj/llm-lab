@@ -7,6 +7,20 @@
     <meta name="theme-color" content="#1F2937" />
     <meta name="description" content="Professional LLM benchmarking and comparison tool" />
     <title>LLM Lab - AI Model Benchmarking</title>
+    <meta http-equiv="Content-Security-Policy" content="
+      default-src 'self';
+      script-src 'self' 'unsafe-inline' 'unsafe-eval';
+      style-src 'self' 'unsafe-inline';
+      img-src 'self' data: https://images.pexels.com;
+      font-src 'self';
+      connect-src 'self'
+        https://api.openai.com
+        https://api.anthropic.com
+        https://generativelanguage.googleapis.com
+        https://api-inference.huggingface.co
+        https://api.mistral.ai
+        https://*.supabase.co;
+    ">
   </head>
   <body>
     <div id="root"></div>
