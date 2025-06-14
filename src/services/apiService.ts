@@ -4,6 +4,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { HfInference } from '@huggingface/inference';
 import MistralAI from '@mistralai/mistralai';
 import { LLMModel, BenchmarkTask } from '../types';
+import { securityService } from './securityService';
 
 interface APIResponse {
   content: string;
@@ -39,6 +40,7 @@ class APIService {
 
   constructor() {
     this.initializeFromEnv();
+    this.loadStoredKeys();
   }
 
   private initializeFromEnv() {
@@ -53,9 +55,47 @@ class APIService {
     this.initializeClients();
   }
 
+  private loadStoredKeys() {
+    try {
+      const storedKeys = securityService.secureRetrieve('llm-lab-api-keys');
+      if (storedKeys) {
+        this.apiKeys = { ...this.apiKeys, ...storedKeys };
+        this.initializeClients();
+      }
+    } catch (error) {
+      console.error('Failed to load stored API keys:', error);
+    }
+  }
+
   updateKeys(keys: APIKeys) {
-    this.apiKeys = { ...keys };
+    // Validate each API key before storing
+    const validatedKeys: APIKeys = { ...keys };
+    const validationErrors: string[] = [];
+
+    for (const [provider, key] of Object.entries(keys)) {
+      if (key && key.trim().length > 0) {
+        const validation = securityService.validateApiKey(provider, key);
+        if (!validation.isValid) {
+          validationErrors.push(`${provider}: ${validation.error}`);
+          validatedKeys[provider as keyof APIKeys] = ''; // Clear invalid key
+        }
+      }
+    }
+
+    if (validationErrors.length > 0) {
+      console.warn('API key validation warnings:', validationErrors);
+      // Still proceed but log warnings
+    }
+
+    this.apiKeys = { ...validatedKeys };
     this.initializeClients();
+    
+    // Store securely
+    try {
+      securityService.secureStore('llm-lab-api-keys', this.apiKeys);
+    } catch (error) {
+      console.error('Failed to store API keys:', error);
+    }
     
     // Notify AI assistant service of updated keys
     if (typeof window !== 'undefined') {
@@ -108,7 +148,7 @@ class APIService {
         this.mistral = null;
       }
     } catch (error) {
-      console.warn('Some API clients could not be initialized:', error);
+      console.warn('Some API clients could not be initialized:', securityService.sanitizeError(error));
     }
   }
 
@@ -116,17 +156,26 @@ class APIService {
     const startTime = Date.now();
     
     try {
+      // Check rate limiting
+      if (!securityService.checkRateLimit(model.provider, 10, 60000)) {
+        throw new Error(`Rate limit exceeded for ${model.provider}. Please wait before making more requests.`);
+      }
+
+      // Sanitize task prompt
+      const sanitizedPrompt = securityService.sanitizeInput(task.prompt);
+      const sanitizedTask = { ...task, prompt: sanitizedPrompt };
+
       switch (model.provider) {
         case 'OpenAI':
-          return await this.callOpenAI(model, task, startTime);
+          return await this.callOpenAI(model, sanitizedTask, startTime);
         case 'Anthropic':
-          return await this.callAnthropic(model, task, startTime);
+          return await this.callAnthropic(model, sanitizedTask, startTime);
         case 'Google':
-          return await this.callGoogle(model, task, startTime);
+          return await this.callGoogle(model, sanitizedTask, startTime);
         case 'Meta':
-          return await this.callHuggingFace(model, task, startTime);
+          return await this.callHuggingFace(model, sanitizedTask, startTime);
         case 'Mistral AI':
-          return await this.callMistral(model, task, startTime);
+          return await this.callMistral(model, sanitizedTask, startTime);
         default:
           throw new Error(`Unsupported provider: ${model.provider}`);
       }
@@ -135,7 +184,7 @@ class APIService {
         content: '',
         usage: { inputTokens: 0, outputTokens: 0 },
         latency: Date.now() - startTime,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: securityService.sanitizeError(error)
       };
     }
   }
@@ -297,6 +346,23 @@ class APIService {
     if (this.huggingFace) providers.push('Meta');
     if (this.mistral) providers.push('Mistral AI');
     return providers;
+  }
+
+  // Security methods
+  clearAllApiKeys(): void {
+    this.apiKeys = {
+      openai: '',
+      anthropic: '',
+      google: '',
+      huggingface: '',
+      mistral: ''
+    };
+    this.initializeClients();
+    securityService.clearAllSecurityData();
+  }
+
+  getSecurityReport() {
+    return securityService.generateSecurityReport();
   }
 }
 

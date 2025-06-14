@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Key, Eye, EyeOff, CheckCircle, AlertCircle, Save, Settings, ExternalLink, DollarSign, Clock, Zap, Info } from 'lucide-react';
+import { Key, Eye, EyeOff, CheckCircle, AlertCircle, Save, Settings, ExternalLink, DollarSign, Clock, Zap, Info, Shield, AlertTriangle } from 'lucide-react';
+import { securityService } from '../services/securityService';
 
 interface APIKeys {
   openai: string;
@@ -25,25 +26,69 @@ const APIConfiguration: React.FC<APIConfigurationProps> = ({ onKeysUpdate }) => 
   const [isExpanded, setIsExpanded] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showDetailedGuide, setShowDetailedGuide] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [securityStatus, setSecurityStatus] = useState<{ isSecure: boolean; warnings: string[] }>({
+    isSecure: true,
+    warnings: []
+  });
 
   useEffect(() => {
-    // Load keys from localStorage on component mount
-    const savedKeys = localStorage.getItem('llm-lab-api-keys');
-    if (savedKeys) {
-      try {
-        const parsedKeys = JSON.parse(savedKeys);
-        setKeys(parsedKeys);
-        onKeysUpdate(parsedKeys);
-      } catch (error) {
-        console.error('Failed to parse saved API keys:', error);
+    // Load keys from secure storage on component mount
+    loadStoredKeys();
+    
+    // Check security status
+    checkSecurityStatus();
+  }, []);
+
+  const loadStoredKeys = () => {
+    try {
+      const savedKeys = securityService.secureRetrieve('llm-lab-api-keys');
+      if (savedKeys) {
+        setKeys(savedKeys);
+        onKeysUpdate(savedKeys);
       }
+    } catch (error) {
+      console.error('Failed to load saved API keys:', error);
+      setSecurityStatus(prev => ({
+        ...prev,
+        warnings: [...prev.warnings, 'Failed to load stored API keys. Storage may be corrupted.']
+      }));
     }
-  }, [onKeysUpdate]);
+  };
+
+  const checkSecurityStatus = () => {
+    const status = securityService.checkEnvironmentSecurity();
+    setSecurityStatus(status);
+  };
+
+  const validateApiKey = (provider: string, value: string) => {
+    if (!value.trim()) {
+      setValidationErrors(prev => ({ ...prev, [provider]: '' }));
+      return;
+    }
+
+    const validation = securityService.validateApiKey(provider, value);
+    if (!validation.isValid) {
+      setValidationErrors(prev => ({ ...prev, [provider]: validation.error || 'Invalid key format' }));
+    } else {
+      setValidationErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[provider];
+        return newErrors;
+      });
+    }
+  };
 
   const handleKeyChange = (provider: keyof APIKeys, value: string) => {
-    const newKeys = { ...keys, [provider]: value };
+    // Sanitize input to prevent injection attacks
+    const sanitizedValue = securityService.sanitizeInput(value);
+    
+    const newKeys = { ...keys, [provider]: sanitizedValue };
     setKeys(newKeys);
     setHasUnsavedChanges(true);
+    
+    // Validate the key format
+    validateApiKey(provider, sanitizedValue);
   };
 
   const toggleKeyVisibility = (provider: string) => {
@@ -51,33 +96,68 @@ const APIConfiguration: React.FC<APIConfigurationProps> = ({ onKeysUpdate }) => 
   };
 
   const saveKeys = () => {
-    localStorage.setItem('llm-lab-api-keys', JSON.stringify(keys));
-    onKeysUpdate(keys);
-    setHasUnsavedChanges(false);
+    try {
+      // Validate all keys before saving
+      const errors: Record<string, string> = {};
+      let hasErrors = false;
+
+      Object.entries(keys).forEach(([provider, key]) => {
+        if (key.trim()) {
+          const validation = securityService.validateApiKey(provider, key);
+          if (!validation.isValid) {
+            errors[provider] = validation.error || 'Invalid key format';
+            hasErrors = true;
+          }
+        }
+      });
+
+      if (hasErrors) {
+        setValidationErrors(errors);
+        return;
+      }
+
+      // Save using secure storage
+      securityService.secureStore('llm-lab-api-keys', keys);
+      onKeysUpdate(keys);
+      setHasUnsavedChanges(false);
+      setValidationErrors({});
+
+      // Refresh security status
+      checkSecurityStatus();
+    } catch (error) {
+      console.error('Failed to save API keys:', error);
+      alert('Failed to save API keys. Please try again.');
+    }
   };
 
   const clearKeys = () => {
-    const emptyKeys = {
-      openai: '',
-      anthropic: '',
-      google: '',
-      huggingface: '',
-      mistral: ''
-    };
-    setKeys(emptyKeys);
-    localStorage.removeItem('llm-lab-api-keys');
-    onKeysUpdate(emptyKeys);
-    setHasUnsavedChanges(false);
+    if (confirm('Are you sure you want to clear all API keys? This action cannot be undone.')) {
+      const emptyKeys = {
+        openai: '',
+        anthropic: '',
+        google: '',
+        huggingface: '',
+        mistral: ''
+      };
+      setKeys(emptyKeys);
+      setValidationErrors({});
+      securityService.clearAllSecurityData();
+      onKeysUpdate(emptyKeys);
+      setHasUnsavedChanges(false);
+    }
   };
 
   const getProviderStatus = (key: string) => {
     return key.length > 0 ? 'configured' : 'missing';
   };
 
-  const getStatusIcon = (status: string) => {
+  const getStatusIcon = (status: string, provider: string) => {
+    if (validationErrors[provider]) {
+      return <AlertCircle className="h-4 w-4 text-red-400" />;
+    }
     return status === 'configured' ? 
       <CheckCircle className="h-4 w-4 text-green-400" /> : 
-      <AlertCircle className="h-4 w-4 text-red-400" />;
+      <AlertCircle className="h-4 w-4 text-gray-400" />;
   };
 
   const providers = [
@@ -152,6 +232,9 @@ const APIConfiguration: React.FC<APIConfigurationProps> = ({ onKeysUpdate }) => 
             </div>
           </div>
           <div className="flex items-center space-x-4">
+            {!securityStatus.isSecure && (
+              <AlertTriangle className="h-5 w-5 text-yellow-400" />
+            )}
             {hasUnsavedChanges && (
               <span className="text-yellow-400 text-sm">Unsaved changes</span>
             )}
@@ -165,6 +248,46 @@ const APIConfiguration: React.FC<APIConfigurationProps> = ({ onKeysUpdate }) => 
       {isExpanded && (
         <div className="border-t border-gray-700 p-6">
           <div className="space-y-6">
+            {/* Security Status */}
+            {(!securityStatus.isSecure || securityStatus.warnings.length > 0) && (
+              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4">
+                <div className="flex items-center space-x-3 mb-3">
+                  <Shield className="h-5 w-5 text-yellow-400" />
+                  <h3 className="text-yellow-400 font-medium">Security Status</h3>
+                </div>
+                <div className="space-y-2">
+                  {securityStatus.warnings.map((warning, index) => (
+                    <div key={index} className="text-yellow-200 text-sm flex items-start space-x-2">
+                      <AlertTriangle className="h-4 w-4 text-yellow-400 mt-0.5 flex-shrink-0" />
+                      <span>{warning}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Security Notice */}
+            <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
+              <div className="flex items-center space-x-3 mb-3">
+                <Shield className="h-5 w-5 text-blue-400" />
+                <h3 className="text-blue-400 font-medium">Security & Privacy</h3>
+              </div>
+              <div className="text-blue-200 text-sm space-y-2">
+                <div className="flex items-center space-x-2">
+                  <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                  <span>API keys are stored locally in your browser and validated before use</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                  <span>Direct communication with AI providers - no proxy servers</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                  <span>Content Security Policy prevents unauthorized access</span>
+                </div>
+              </div>
+            </div>
+
             {/* Quick Guide Toggle */}
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
@@ -246,7 +369,7 @@ const APIConfiguration: React.FC<APIConfigurationProps> = ({ onKeysUpdate }) => 
                     <li>• <strong>Anthropic Claude 3.5 Sonnet</strong> excels at reasoning and coding tasks</li>
                     <li>• <strong>Google Gemini 1.5 Pro</strong> has the largest context window (2M tokens)</li>
                     <li>• Most providers offer $5 free credits to start - no payment required initially</li>
-                    <li>• API keys are stored locally in your browser - they never leave your device</li>
+                    <li>• API keys are validated for format and stored securely in your browser</li>
                   </ul>
                 </div>
               </div>
@@ -258,7 +381,7 @@ const APIConfiguration: React.FC<APIConfigurationProps> = ({ onKeysUpdate }) => 
                 <div key={provider.key} className="space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="text-sm font-medium text-gray-300 flex items-center space-x-2">
-                      {getStatusIcon(getProviderStatus(keys[provider.key]))}
+                      {getStatusIcon(getProviderStatus(keys[provider.key]), provider.key)}
                       <span>{provider.name}</span>
                       <a
                         href={provider.url}
@@ -283,10 +406,21 @@ const APIConfiguration: React.FC<APIConfigurationProps> = ({ onKeysUpdate }) => 
                     type={showKeys[provider.key] ? 'text' : 'password'}
                     value={keys[provider.key]}
                     onChange={(e) => handleKeyChange(provider.key, e.target.value)}
+                    onBlur={() => validateApiKey(provider.key, keys[provider.key])}
                     placeholder={provider.placeholder}
-                    className="w-full px-4 py-2 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                    className={`w-full px-4 py-2 bg-gray-700/50 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 transition-all duration-200 ${
+                      validationErrors[provider.key] 
+                        ? 'border-red-500 focus:ring-red-500' 
+                        : 'border-gray-600 focus:ring-blue-500 focus:border-transparent'
+                    }`}
                   />
-                  {keys[provider.key] && (
+                  {validationErrors[provider.key] && (
+                    <div className="flex items-center space-x-2 text-red-400 text-xs">
+                      <AlertCircle className="h-3 w-3" />
+                      <span>{validationErrors[provider.key]}</span>
+                    </div>
+                  )}
+                  {keys[provider.key] && !validationErrors[provider.key] && (
                     <div className="flex items-center space-x-4 text-xs text-gray-400">
                       <span>{provider.models.length} models available</span>
                       <span>{provider.pricing}</span>
@@ -300,11 +434,11 @@ const APIConfiguration: React.FC<APIConfigurationProps> = ({ onKeysUpdate }) => 
               <div className="text-sm text-gray-400">
                 <div className="flex items-center space-x-2 mb-1">
                   <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                  <span>API keys are stored locally and never sent to our servers</span>
+                  <span>All API keys are validated and stored securely</span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
-                  <span>All communications go directly to the respective AI providers</span>
+                  <span>Communications go directly to AI providers</span>
                 </div>
               </div>
               <div className="flex items-center space-x-3">
@@ -316,7 +450,7 @@ const APIConfiguration: React.FC<APIConfigurationProps> = ({ onKeysUpdate }) => 
                 </button>
                 <button
                   onClick={saveKeys}
-                  disabled={!hasUnsavedChanges}
+                  disabled={!hasUnsavedChanges || Object.keys(validationErrors).length > 0}
                   className="flex items-center space-x-2 px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-all duration-200"
                 >
                   <Save className="h-4 w-4" />
@@ -332,7 +466,7 @@ const APIConfiguration: React.FC<APIConfigurationProps> = ({ onKeysUpdate }) => 
                 {providers.map((provider) => (
                   <div key={provider.key} className="space-y-1">
                     <div className={`text-lg font-bold ${
-                      getProviderStatus(keys[provider.key]) === 'configured' 
+                      getProviderStatus(keys[provider.key]) === 'configured' && !validationErrors[provider.key]
                         ? 'text-green-400' 
                         : 'text-gray-500'
                     }`}>

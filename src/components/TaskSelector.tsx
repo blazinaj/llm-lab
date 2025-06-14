@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { BenchmarkTask } from '../types';
 import { aiAssistantService, TaskSuggestion } from '../services/aiAssistantService';
+import { securityService } from '../services/securityService';
 import { Code, Brain, Lightbulb, BarChart, MessageSquare, Cpu, Calculator, Pen, Plus, Eye, EyeOff, Edit3, Trash2, Sparkles, Wand2, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface TaskSelectorProps {
@@ -36,6 +37,7 @@ const TaskSelector: React.FC<TaskSelectorProps> = ({
   const [aiSuggestion, setAiSuggestion] = useState<TaskSuggestion | null>(null);
   const [improvementRequest, setImprovementRequest] = useState('');
   const [showAiAssistant, setShowAiAssistant] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
   const getTaskIcon = (category: string) => {
     switch (category) {
@@ -78,11 +80,55 @@ const TaskSelector: React.FC<TaskSelectorProps> = ({
     setExpandedTasks(newExpanded);
   };
 
-  const handleCreateTask = () => {
-    if (newTask.name.trim() && newTask.prompt.trim()) {
-      onCreateCustomTask(newTask);
-      resetForm();
+  const validateAndCreateTask = () => {
+    // Clear previous validation errors
+    setValidationErrors([]);
+
+    // Validate task data using security service
+    const validation = securityService.validateTaskData(newTask);
+    if (!validation.isValid) {
+      setValidationErrors([validation.error || 'Invalid task data']);
+      return;
     }
+
+    // Additional custom validation
+    const errors: string[] = [];
+    
+    // Check for potentially harmful content
+    const suspiciousPatterns = [
+      /script[^a-z]/i,
+      /javascript:/i,
+      /data:text\/html/i,
+      /<iframe/i,
+      /<object/i,
+      /<embed/i
+    ];
+
+    const allText = `${newTask.name} ${newTask.description} ${newTask.prompt} ${newTask.expectedOutput}`;
+    for (const pattern of suspiciousPatterns) {
+      if (pattern.test(allText)) {
+        errors.push('Task content contains potentially unsafe elements');
+        break;
+      }
+    }
+
+    if (errors.length > 0) {
+      setValidationErrors(errors);
+      return;
+    }
+
+    // Sanitize inputs before creating task
+    const sanitizedTask = {
+      name: securityService.sanitizeInput(newTask.name),
+      description: securityService.sanitizeInput(newTask.description),
+      category: newTask.category,
+      difficulty: newTask.difficulty,
+      prompt: securityService.sanitizeInput(newTask.prompt),
+      expectedOutput: securityService.sanitizeInput(newTask.expectedOutput)
+    };
+
+    onCreateCustomTask(sanitizedTask);
+    resetForm();
   };
 
   const resetForm = () => {
@@ -99,20 +145,34 @@ const TaskSelector: React.FC<TaskSelectorProps> = ({
     setAiSuggestion(null);
     setUserInput('');
     setImprovementRequest('');
+    setValidationErrors([]);
   };
 
   const handleGenerateWithAI = async () => {
     if (!userInput.trim()) return;
 
+    // Sanitize user input
+    const sanitizedInput = securityService.sanitizeInput(userInput.trim());
+    
     setIsGenerating(true);
     try {
-      const suggestion = await aiAssistantService.generateBenchmarkTask(userInput.trim());
+      const suggestion = await aiAssistantService.generateBenchmarkTask(sanitizedInput);
       if (suggestion) {
-        setAiSuggestion(suggestion);
+        // Sanitize AI suggestion
+        const sanitizedSuggestion = {
+          ...suggestion,
+          name: securityService.sanitizeInput(suggestion.name),
+          description: securityService.sanitizeInput(suggestion.description),
+          prompt: securityService.sanitizeInput(suggestion.prompt),
+          expectedOutput: securityService.sanitizeInput(suggestion.expectedOutput),
+          reasoning: securityService.sanitizeInput(suggestion.reasoning)
+        };
+        setAiSuggestion(sanitizedSuggestion);
       }
     } catch (error) {
       console.error('Failed to generate task:', error);
-      alert(error instanceof Error ? error.message : 'Failed to generate task. Please try again.');
+      const sanitizedError = securityService.sanitizeError(error);
+      alert(sanitizedError);
     } finally {
       setIsGenerating(false);
     }
@@ -121,16 +181,29 @@ const TaskSelector: React.FC<TaskSelectorProps> = ({
   const handleImproveWithAI = async () => {
     if (!improvementRequest.trim() || !aiSuggestion) return;
 
+    // Sanitize improvement request
+    const sanitizedRequest = securityService.sanitizeInput(improvementRequest.trim());
+
     setIsImproving(true);
     try {
-      const improvedSuggestion = await aiAssistantService.improveBenchmarkTask(aiSuggestion, improvementRequest.trim());
+      const improvedSuggestion = await aiAssistantService.improveBenchmarkTask(aiSuggestion, sanitizedRequest);
       if (improvedSuggestion) {
-        setAiSuggestion(improvedSuggestion);
+        // Sanitize improved suggestion
+        const sanitizedImprovedSuggestion = {
+          ...improvedSuggestion,
+          name: securityService.sanitizeInput(improvedSuggestion.name),
+          description: securityService.sanitizeInput(improvedSuggestion.description),
+          prompt: securityService.sanitizeInput(improvedSuggestion.prompt),
+          expectedOutput: securityService.sanitizeInput(improvedSuggestion.expectedOutput),
+          reasoning: securityService.sanitizeInput(improvedSuggestion.reasoning)
+        };
+        setAiSuggestion(sanitizedImprovedSuggestion);
         setImprovementRequest('');
       }
     } catch (error) {
       console.error('Failed to improve task:', error);
-      alert(error instanceof Error ? error.message : 'Failed to improve task. Please try again.');
+      const sanitizedError = securityService.sanitizeError(error);
+      alert(sanitizedError);
     } finally {
       setIsImproving(false);
     }
@@ -416,6 +489,21 @@ const TaskSelector: React.FC<TaskSelectorProps> = ({
               </div>
             </div>
 
+            {/* Validation Errors */}
+            {validationErrors.length > 0 && (
+              <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+                <div className="flex items-center space-x-2 mb-2">
+                  <AlertCircle className="h-5 w-5 text-red-400" />
+                  <h4 className="text-red-400 font-medium">Validation Errors</h4>
+                </div>
+                <ul className="text-red-300 text-sm space-y-1">
+                  {validationErrors.map((error, index) => (
+                    <li key={index}>• {error}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* AI Assistant Panel */}
               {showAiAssistant && aiAssistantService.isAvailable() && (
@@ -442,8 +530,12 @@ const TaskSelector: React.FC<TaskSelectorProps> = ({
                             onChange={(e) => setUserInput(e.target.value)}
                             placeholder="Describe the capability or skill you want to benchmark..."
                             rows={3}
+                            maxLength={1000}
                             className="w-full px-4 py-2 bg-gray-700/50 border border-purple-400/30 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
                           />
+                          <div className="text-xs text-purple-300 mt-1">
+                            {userInput.length}/1000 characters
+                          </div>
                         </div>
                         <button
                           onClick={handleGenerateWithAI}
@@ -505,6 +597,7 @@ const TaskSelector: React.FC<TaskSelectorProps> = ({
                               value={improvementRequest}
                               onChange={(e) => setImprovementRequest(e.target.value)}
                               placeholder="e.g., make it harder, add more examples, focus on edge cases..."
+                              maxLength={500}
                               className="flex-1 px-3 py-2 bg-gray-700/50 border border-purple-400/30 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
                             />
                             <button
@@ -557,8 +650,12 @@ const TaskSelector: React.FC<TaskSelectorProps> = ({
                       value={newTask.name}
                       onChange={(e) => setNewTask(prev => ({ ...prev, name: e.target.value }))}
                       placeholder="Enter task name..."
+                      maxLength={200}
                       className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
+                    <div className="text-xs text-gray-400 mt-1">
+                      {newTask.name.length}/200 characters
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
@@ -604,8 +701,12 @@ const TaskSelector: React.FC<TaskSelectorProps> = ({
                       value={newTask.description}
                       onChange={(e) => setNewTask(prev => ({ ...prev, description: e.target.value }))}
                       placeholder="Brief description of what this task evaluates..."
+                      maxLength={500}
                       className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
+                    <div className="text-xs text-gray-400 mt-1">
+                      {newTask.description.length}/500 characters
+                    </div>
                   </div>
                 </div>
               </div>
@@ -622,8 +723,12 @@ const TaskSelector: React.FC<TaskSelectorProps> = ({
                     onChange={(e) => setNewTask(prev => ({ ...prev, prompt: e.target.value }))}
                     placeholder="Enter the prompt that will be sent to the AI models..."
                     rows={8}
+                    maxLength={10000}
                     className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                   />
+                  <div className="text-xs text-gray-400 mt-1">
+                    {newTask.prompt.length}/10,000 characters
+                  </div>
                 </div>
 
                 <div>
@@ -635,11 +740,12 @@ const TaskSelector: React.FC<TaskSelectorProps> = ({
                     onChange={(e) => setNewTask(prev => ({ ...prev, expectedOutput: e.target.value }))}
                     placeholder="Describe what a good response should look like or include..."
                     rows={6}
+                    maxLength={2000}
                     className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                   />
-                  <p className="text-xs text-gray-400 mt-1">
-                    This helps with evaluation and provides context for reviewing results.
-                  </p>
+                  <div className="text-xs text-gray-400 mt-1">
+                    {newTask.expectedOutput.length}/2,000 characters | This helps with evaluation and provides context for reviewing results.
+                  </div>
                 </div>
               </div>
             </div>
@@ -652,7 +758,7 @@ const TaskSelector: React.FC<TaskSelectorProps> = ({
                 Cancel
               </button>
               <button
-                onClick={handleCreateTask}
+                onClick={validateAndCreateTask}
                 disabled={!newTask.name.trim() || !newTask.prompt.trim()}
                 className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
               >

@@ -7,6 +7,8 @@
     <meta name="theme-color" content="#1F2937" />
     <meta name="description" content="Professional LLM benchmarking and comparison tool" />
     <title>LLM Lab - AI Model Benchmarking</title>
+    
+    <!-- Security Headers -->
     <meta http-equiv="Content-Security-Policy" content="
       default-src 'self';
       script-src 'self' 'unsafe-inline' 'unsafe-eval';
@@ -20,6 +22,25 @@
         https://api-inference.huggingface.co
         https://api.mistral.ai
         https://*.supabase.co;
+      object-src 'none';
+      base-uri 'self';
+      form-action 'self';
+      frame-ancestors 'none';
+      upgrade-insecure-requests;
+    ">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta http-equiv="X-Frame-Options" content="DENY">
+    <meta http-equiv="X-XSS-Protection" content="1; mode=block">
+    <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
+    <meta http-equiv="Permissions-Policy" content="
+      geolocation=(),
+      microphone=(),
+      camera=(),
+      payment=(),
+      usb=(),
+      magnetometer=(),
+      gyroscope=(),
+      accelerometer=()
     ">
   </head>
   <body>
