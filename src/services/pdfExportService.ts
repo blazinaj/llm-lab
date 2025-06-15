@@ -168,7 +168,7 @@ export class PDFExportService {
     let yPos = this.addHeader(doc, benchmarkName || 'Benchmark Results');
 
     // ===== EXECUTIVE SUMMARY SECTION =====
-    yPos = this.addSection(doc, '📊 Executive Summary', yPos + 10, [59, 130, 246]);
+    yPos = this.addSection(doc, 'EXECUTIVE SUMMARY', yPos + 10, [59, 130, 246]);
     
     // Key Findings Box
     yPos = this.checkPageBreak(doc, yPos, 80);
@@ -187,22 +187,22 @@ export class PDFExportService {
     doc.setTextColor(55, 65, 81);
     
     const findings = [
-      `• Success Rate: ${stats.successRate.toFixed(1)}% (${stats.successful.length}/${results.length} models)`,
-      `• Top Performer: ${getModel(stats.topPerformer?.modelId)?.name || 'N/A'} (${this.formatScore(stats.maxScore)})`,
-      `• Most Economical: ${getModel(stats.mostEconomical?.modelId)?.name || 'N/A'} (${this.formatCost(stats.mostEconomical?.cost || 0)})`,
-      `• Fastest Response: ${getModel(stats.fastest?.modelId)?.name || 'N/A'} (${this.formatLatency(stats.minLatency)})`,
-      `• Total Cost: ${this.formatCost(stats.totalCost)} | Avg per model: ${this.formatCost(stats.avgCost)}`,
-      `• Performance Range: ${this.formatScore(stats.minScore)} - ${this.formatScore(stats.maxScore)}`
+      `Success Rate: ${stats.successRate.toFixed(1)}% (${stats.successful.length}/${results.length} models)`,
+      `Top Performer: ${getModel(stats.topPerformer?.modelId)?.name || 'N/A'} (${this.formatScore(stats.maxScore)})`,
+      `Most Economical: ${getModel(stats.mostEconomical?.modelId)?.name || 'N/A'} (${this.formatCost(stats.mostEconomical?.cost || 0)})`,
+      `Fastest Response: ${getModel(stats.fastest?.modelId)?.name || 'N/A'} (${this.formatLatency(stats.minLatency)})`,
+      `Total Cost: ${this.formatCost(stats.totalCost)} | Avg per model: ${this.formatCost(stats.avgCost)}`,
+      `Performance Range: ${this.formatScore(stats.minScore)} - ${this.formatScore(stats.maxScore)}`
     ];
     
     findings.forEach((finding, index) => {
-      doc.text(finding, 25, yPos + 25 + (index * 7));
+      doc.text(`• ${finding}`, 25, yPos + 25 + (index * 7));
     });
     
     yPos += 85;
 
     // ===== BENCHMARK OVERVIEW =====
-    yPos = this.addSection(doc, '📋 Benchmark Overview', yPos, [107, 114, 128]);
+    yPos = this.addSection(doc, 'BENCHMARK OVERVIEW', yPos, [107, 114, 128]);
     
     const overviewData = [
       ['Task Name', task.name],
@@ -233,7 +233,7 @@ export class PDFExportService {
     yPos = doc.lastAutoTable.finalY + 20;
 
     // ===== PERFORMANCE STATISTICS =====
-    yPos = this.addSection(doc, '📈 Performance Statistics', yPos, [16, 185, 129]);
+    yPos = this.addSection(doc, 'PERFORMANCE STATISTICS', yPos, [16, 185, 129]);
     
     const performanceData = [
       ['Average Score', this.formatScore(stats.avgScore), 'Overall performance across all models'],
@@ -264,7 +264,7 @@ export class PDFExportService {
     yPos = doc.lastAutoTable.finalY + 20;
 
     // ===== COST & EFFICIENCY ANALYSIS =====
-    yPos = this.addSection(doc, '💰 Cost & Efficiency Analysis', yPos, [245, 158, 11]);
+    yPos = this.addSection(doc, 'COST & EFFICIENCY ANALYSIS', yPos, [245, 158, 11]);
     
     const costData = [
       ['Total Cost', this.formatCost(stats.totalCost), 'Sum of all successful benchmark runs'],
@@ -295,7 +295,7 @@ export class PDFExportService {
     yPos = doc.lastAutoTable.finalY + 20;
 
     // ===== RESPONSE TIME ANALYSIS =====
-    yPos = this.addSection(doc, '⚡ Response Time Analysis', yPos, [168, 85, 247]);
+    yPos = this.addSection(doc, 'RESPONSE TIME ANALYSIS', yPos, [168, 85, 247]);
     
     const timingData = [
       ['Average Latency', this.formatLatency(stats.avgLatency), 'Mean response time across models'],
@@ -326,7 +326,7 @@ export class PDFExportService {
     yPos = doc.lastAutoTable.finalY + 20;
 
     // ===== TOKEN USAGE ANALYSIS =====
-    yPos = this.addSection(doc, '🔤 Token Usage Analysis', yPos, [236, 72, 153]);
+    yPos = this.addSection(doc, 'TOKEN USAGE ANALYSIS', yPos, [236, 72, 153]);
     
     const tokenData = [
       ['Total Tokens', stats.totalTokens.toLocaleString(), 'Input + Output tokens combined'],
@@ -359,7 +359,7 @@ export class PDFExportService {
     // ===== TASK PROMPT DETAILS =====
     doc.addPage();
     yPos = 30;
-    yPos = this.addSection(doc, '📝 Task Prompt & Configuration', yPos, [55, 65, 81]);
+    yPos = this.addSection(doc, 'TASK PROMPT & CONFIGURATION', yPos, [55, 65, 81]);
     
     doc.setFontSize(12);
     doc.setFont(undefined, 'bold');
@@ -392,7 +392,7 @@ export class PDFExportService {
     }
 
     // ===== DETAILED MODEL PERFORMANCE =====
-    yPos = this.addSection(doc, '🏆 Detailed Model Performance', yPos, [220, 38, 127]);
+    yPos = this.addSection(doc, 'DETAILED MODEL PERFORMANCE', yPos, [220, 38, 127]);
     
     const sortedResults = [...stats.successful].sort((a, b) => b.score - a.score);
     
@@ -440,7 +440,7 @@ export class PDFExportService {
 
     // ===== ERROR ANALYSIS =====
     if (stats.failed.length > 0) {
-      yPos = this.addSection(doc, '❌ Error Analysis', yPos, [239, 68, 68]);
+      yPos = this.addSection(doc, 'ERROR ANALYSIS', yPos, [239, 68, 68]);
       
       const errorData = stats.failed.map((result) => {
         const model = getModel(result.modelId);
@@ -472,34 +472,34 @@ export class PDFExportService {
     }
 
     // ===== RECOMMENDATIONS =====
-    yPos = this.addSection(doc, '💡 Recommendations', yPos, [59, 130, 246]);
+    yPos = this.addSection(doc, 'RECOMMENDATIONS', yPos, [59, 130, 246]);
     
     yPos = this.checkPageBreak(doc, yPos, 60);
     
     const recommendations = [];
     
     if (stats.topPerformer) {
-      recommendations.push(`🏆 For best overall performance: ${getModel(stats.topPerformer.modelId)?.name} (${this.formatScore(stats.topPerformer.score)})`);
+      recommendations.push(`For best overall performance: ${getModel(stats.topPerformer.modelId)?.name} (${this.formatScore(stats.topPerformer.score)})`);
     }
     
     if (stats.mostEconomical) {
-      recommendations.push(`💰 For budget-conscious applications: ${getModel(stats.mostEconomical.modelId)?.name} (${this.formatCost(stats.mostEconomical.cost)})`);
+      recommendations.push(`For budget-conscious applications: ${getModel(stats.mostEconomical.modelId)?.name} (${this.formatCost(stats.mostEconomical.cost)})`);
     }
     
     if (stats.fastest) {
-      recommendations.push(`⚡ For speed-critical applications: ${getModel(stats.fastest.modelId)?.name} (${this.formatLatency(stats.fastest.latency)})`);
+      recommendations.push(`For speed-critical applications: ${getModel(stats.fastest.modelId)?.name} (${this.formatLatency(stats.fastest.latency)})`);
     }
     
     const bestValue = stats.successful.sort((a, b) => (b.score / b.cost) - (a.score / a.cost))[0];
     if (bestValue) {
-      recommendations.push(`📊 For best value proposition: ${getModel(bestValue.modelId)?.name} (efficiency: ${(bestValue.score / bestValue.cost * 1000).toFixed(0)})`);
+      recommendations.push(`For best value proposition: ${getModel(bestValue.modelId)?.name} (efficiency: ${(bestValue.score / bestValue.cost * 1000).toFixed(0)})`);
     }
     
-    recommendations.push(`📈 Performance spread: ${((stats.maxScore - stats.minScore) * 100).toFixed(1)} percentage points difference between best and worst`);
-    recommendations.push(`💵 Budget impact: Cost ranges from ${this.formatCost(stats.mostEconomical?.cost || 0)} to ${this.formatCost(Math.max(...stats.successful.map(r => r.cost)))}`);
+    recommendations.push(`Performance spread: ${((stats.maxScore - stats.minScore) * 100).toFixed(1)} percentage points difference between best and worst`);
+    recommendations.push(`Budget impact: Cost ranges from ${this.formatCost(stats.mostEconomical?.cost || 0)} to ${this.formatCost(Math.max(...stats.successful.map(r => r.cost)))}`);
     
     if (stats.successRate < 100) {
-      recommendations.push(`⚠️ ${stats.failed.length} model(s) failed - check API configurations and rate limits`);
+      recommendations.push(`${stats.failed.length} model(s) failed - check API configurations and rate limits`);
     }
     
     doc.setFontSize(11);
@@ -508,14 +508,14 @@ export class PDFExportService {
     
     recommendations.forEach((rec, index) => {
       yPos = this.checkPageBreak(doc, yPos, 15);
-      doc.text(rec, 20, yPos);
+      doc.text(`• ${rec}`, 20, yPos);
       yPos += 12;
     });
 
     // ===== COMPLETE MODEL OUTPUTS =====
     doc.addPage();
     yPos = 30;
-    yPos = this.addSection(doc, '📄 Complete Model Outputs', yPos, [34, 197, 94]);
+    yPos = this.addSection(doc, 'COMPLETE MODEL OUTPUTS', yPos, [34, 197, 94]);
     
     sortedResults.forEach((result, index) => {
       const model = getModel(result.modelId);
@@ -576,7 +576,7 @@ export class PDFExportService {
     // ===== TECHNICAL APPENDIX =====
     doc.addPage();
     yPos = 30;
-    yPos = this.addSection(doc, '🔧 Technical Appendix', yPos, [107, 114, 128]);
+    yPos = this.addSection(doc, 'TECHNICAL APPENDIX', yPos, [107, 114, 128]);
     
     // Model specifications
     const uniqueModels = [...new Set(results.map(r => r.modelId))];
